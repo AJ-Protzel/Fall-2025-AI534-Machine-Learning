@@ -1,0 +1,1470 @@
+# # # # # # from __future__ import division  # Only needed for Python 2, safe to remove in Python 3
+
+# # # # # # import pandas as pd
+# # # # # # import time
+# # # # # # import os
+# # # # # # from svector import svector
+
+# # # # # # __author__ = "Protzela"
+
+# # # # # # TRAIN_PATH = "train.csv"
+# # # # # # DEV_PATH = "dev.csv"
+# # # # # # TEST_PATH = "test.csv"
+
+# # # # # # OUTPUT_PATH = "test.predicted.csv"
+# # # # # # LOG_PATH = "log.txt"
+
+# # # # # # def symbol(log_path=LOG_PATH):
+# # # # # #     errors = []
+# # # # # #     if os.path.exists(log_path):
+# # # # # #         with open(log_path, 'r') as f:
+# # # # # #             for line in f:
+# # # # # #                 stripped = line.strip()
+# # # # # #                 if stripped:
+# # # # # #                     errors.append(float(stripped))
+
+# # # # # #     if len(errors) < 2:
+# # # # # #         return "=="
+
+# # # # # #     current_error = errors[-1]
+# # # # # #     last_error = errors[-2]
+# # # # # #     best_error = min(errors)
+
+# # # # # #     symbol1 = '=' if current_error == last_error else ('-' if current_error > last_error else '+')
+# # # # # #     symbol2 = '=' if current_error == best_error else ('-' if current_error > best_error else '+')
+
+# # # # # #     return symbol1 + symbol2
+
+# # # # # # def read_from(file_path):
+# # # # # #     data = pd.read_csv(file_path)
+# # # # # #     for i in range(len(data)):
+# # # # # #         id, words, label = data.iloc[i]
+# # # # # #         yield (1 if label=="+" else -1, words.split())
+
+# # # # # # def make_vector(words):
+# # # # # #     v = svector()
+# # # # # #     for word in words:
+# # # # # #         v[word] += 1
+# # # # # #     v["<bias>"] = 1  # added bias
+# # # # # #     return v
+
+# # # # # # def test(model, dev_path=DEV_PATH):
+# # # # # #     tot, err = 0, 0
+# # # # # #     for i, (label, words) in enumerate(read_from(dev_path), 1): # note 1...|D|
+# # # # # #         err += label * (model.dot(make_vector(words))) <= 0
+# # # # # #     return err/i  # i is |D| now
+
+# # # # # # def train(epochs=5, train_path=TRAIN_PATH, dev_path=DEV_PATH):
+# # # # # #     t = time.time()
+# # # # # #     best_err = 1.
+# # # # # #     model = svector()
+# # # # # #     weights = svector()
+# # # # # #     count = 0
+
+# # # # # #     for it in range(1, epochs+1):
+# # # # # #         updates = 0
+# # # # # #         for i, (label, words) in enumerate(read_from(train_path), 1): # label is +1 or -1
+# # # # # #             sent = make_vector(words)
+# # # # # #             if label * (model.dot(sent)) <= 0:
+# # # # # #                 updates += 1
+# # # # # #                 model += label * sent
+# # # # # #             weights += model
+# # # # # #             count += 1
+        
+# # # # # #         avg_model = svector()
+# # # # # #         for key in weights:
+# # # # # #             avg_model[key] = weights[key] / count
+# # # # # #         dev_err = test(avg_model)
+# # # # # #         best_err = min(best_err, dev_err)
+        
+# # # # # #         print("epoch %d, update %.1f%%, dev %.1f%%" % (it, updates / i * 100, dev_err * 100))
+# # # # # #     print("best dev err %.1f%%, |w|=%d, time: %.1f secs" % (best_err * 100, len(avg_model), time.time() - t))
+# # # # # #     return avg_model
+
+# # # # # # def predict(model, test_path=TEST_PATH):
+# # # # # #     y_pred = []
+# # # # # #     err = 0
+# # # # # #     # t = time.time()
+# # # # # #     for i, (label, words) in enumerate(read_from(test_path), 1):
+# # # # # #         sent = make_vector(words)
+# # # # # #         raw_pred = 1 if model.dot(sent) > 0 else -1
+# # # # # #         pred = "+" if raw_pred == 1 else "-"
+# # # # # #         y_pred.append(pred)
+# # # # # #         err += (raw_pred != label)
+# # # # # #     err_rate = err / i
+
+# # # # # #     print("best dev err %.1f%% %s" % (err_rate * 100, symbol()))
+# # # # # #     return y_pred, err_rate
+
+# # # # # # def write_out(y_pred, err_rate, test_path=TEST_PATH, output_path=OUTPUT_PATH, log_path=LOG_PATH):
+# # # # # #     test = pd.read_csv(test_path).copy()
+# # # # # #     test["target"] = y_pred
+# # # # # #     test.to_csv(output_path, index=False)
+
+# # # # # #     with open(log_path, 'a') as f:
+# # # # # #         f.write(f"{err_rate:.2f}\n")
+
+# # # # # # def extra(model, dev_path=DEV_PATH, output_file="misclassed.txt"):
+# # # # # #     # Convert model to a list of (feature, weight) pairs
+# # # # # #     features = list(model.items())
+
+# # # # # #     # Sort by weight
+# # # # # #     sorted_by_weight = sorted(features, key=lambda x: x[1])
+
+# # # # # #     # Top 20 negative (lowest weights)
+# # # # # #     print("Top 20 most negative features:")
+# # # # # #     for feature, weight in sorted_by_weight[:20]:
+# # # # # #         print(f"{feature}: {weight:.4f}")
+
+# # # # # #     # Top 20 positive (highest weights)
+# # # # # #     print("\nTop 20 most positive features:")
+# # # # # #     for feature, weight in sorted_by_weight[-20:][::-1]:
+# # # # # #         print(f"{feature}: {weight:.4f}")
+
+
+# # # # # #     false_positives = []  # true label -1, predicted +1
+# # # # # #     false_negatives = []  # true label +1, predicted -1
+
+# # # # # #     for label, words in read_from(dev_path):
+# # # # # #         sent_vector = make_vector(words)
+# # # # # #         score = model.dot(sent_vector)
+# # # # # #         sentence_text = " ".join(words)
+
+# # # # # #         # Misclassified negative as positive
+# # # # # #         if label == -1 and score > 0:
+# # # # # #             false_positives.append((score, sentence_text))
+
+# # # # # #         # Misclassified positive as negative
+# # # # # #         elif label == +1 and score < 0:
+# # # # # #             false_negatives.append((score, sentence_text))
+
+# # # # # #     # Sort by confidence (score magnitude)
+# # # # # #     false_positives.sort(key=lambda x: -x[0])  # most positive scores first
+# # # # # #     false_negatives.sort(key=lambda x: x[0])   # most negative scores first
+
+# # # # # #     # Write to a text file
+# # # # # #     with open(output_file, "w", encoding="utf-8") as f:
+# # # # # #         f.write("Top 5 negative examples misclassified as positive:\n")
+# # # # # #         for score, sentence in false_positives[:5]:
+# # # # # #             f.write(f"{score:.4f}: {sentence}\n")
+
+# # # # # #         f.write("\nTop 5 positive examples misclassified as negative:\n")
+# # # # # #         for score, sentence in false_negatives[:5]:
+# # # # # #             f.write(f"{score:.4f}: {sentence}\n")
+
+# # # # # #     print(f"Misclassified sentences written to {output_file}")
+# # # # # #     print("Done")
+
+# # # # # # def main():
+# # # # # #     start_time = time.time()
+
+# # # # # #     print("🔹 Training model...")
+# # # # # #     model = train(10)
+
+# # # # # #     print("🔹 Evaluating on test set...")
+# # # # # #     y_pred, err = predict(model)
+
+# # # # # #     print("🔹 Writing out...")
+# # # # # #     write_out(y_pred, err)
+
+# # # # # #     elapsed = time.time() - start_time
+# # # # # #     print(f"✅ Completed in {elapsed:.2f} seconds.")
+
+# # # # # #     print("\nPrinting extra data\n")
+# # # # # #     extra(model)
+
+# # # # # # if __name__ == "__main__":
+# # # # # #     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # # # # from __future__ import division  # Only needed for Python 2, safe to remove in Python 3
+
+# # # # # import pandas as pd
+# # # # # import time
+# # # # # import os
+# # # # # from svector import svector
+
+# # # # # __author__ = "Protzela"
+
+# # # # # TRAIN_PATH = "train.csv"
+# # # # # DEV_PATH = "dev.csv"
+# # # # # TEST_PATH = "test.csv"
+
+# # # # # OUTPUT_PATH = "test.predicted.csv"
+# # # # # LOG_PATH = "log.txt"
+
+# # # # # def symbol(log_path=LOG_PATH):
+# # # # #     errors = []
+# # # # #     if os.path.exists(log_path):
+# # # # #         with open(log_path, 'r') as f:
+# # # # #             for line in f:
+# # # # #                 stripped = line.strip()
+# # # # #                 if stripped:
+# # # # #                     errors.append(float(stripped))
+
+# # # # #     if len(errors) < 2:
+# # # # #         return "=="
+
+# # # # #     current_error = errors[-1]
+# # # # #     last_error = errors[-2]
+# # # # #     best_error = min(errors)
+
+# # # # #     symbol1 = '=' if current_error == last_error else ('-' if current_error > last_error else '+')
+# # # # #     symbol2 = '=' if current_error == best_error else ('-' if current_error > best_error else '+')
+
+# # # # #     return symbol1 + symbol2
+
+# # # # # def read_from(file_path):
+# # # # #     data = pd.read_csv(file_path)
+# # # # #     for i in range(len(data)):
+# # # # #         id, words, label = data.iloc[i]
+# # # # #         yield (1 if label=="+" else -1, words.split())
+
+# # # # # def make_vector(words):
+# # # # #     v = svector()
+# # # # #     for word in words:
+# # # # #         v[word] += 1
+# # # # #     v["<bias>"] = 1  # added bias
+# # # # #     return v
+
+# # # # # def test(model, dev_path=DEV_PATH):
+# # # # #     tot, err = 0, 0
+# # # # #     for i, (label, words) in enumerate(read_from(dev_path), 1): # note 1...|D|
+# # # # #         err += label * (model.dot(make_vector(words))) <= 0
+# # # # #     return err/i  # i is |D| now
+
+# # # # # def train(epochs=5, train_path=TRAIN_PATH, dev_path=DEV_PATH):
+# # # # #     start_time = time.time()
+# # # # #     best_dev_error = 1.0
+
+# # # # #     model = svector()         # current weight vector (w)
+# # # # #     sum_updates = svector()     # accumulated weight vector (wa)
+# # # # #     counter = 0               # number of examples seen (c)
+
+# # # # #     for epoch in range(1, epochs + 1):
+# # # # #         updates = 0
+# # # # #         for i, (label, words) in enumerate(read_from(train_path), 1):  # label is +1 or -1
+# # # # #             features = make_vector(words)
+# # # # #             if label * model.dot(features) <= 0:
+# # # # #                 updates += 1
+# # # # #                 model += label * features
+# # # # #                 sum_updates += counter * (label * features)
+# # # # #             counter += 1
+
+# # # # #         # Compute final averaged model: model_avg = counter * model - sum_updates
+# # # # #         model_avg = svector()
+# # # # #         for feature in model:
+# # # # #             model_avg[feature] = model[feature] - (sum_updates.get(feature, 0) / counter)
+
+# # # # #         dev_error = test(model_avg, dev_path)
+# # # # #         best_dev_error = min(best_dev_error, dev_error)
+# # # # #         print("epoch %d, update %.1f%%, dev %.1f%%" % (epoch, updates / i * 100, dev_error * 100))
+
+# # # # #     print("best dev err %.1f%%, |w|=%d, time: %.1f secs" % (best_dev_error * 100, len(model_avg), time.time() - start_time))
+# # # # #     return model_avg
+
+# # # # # def predict(model, test_path=TEST_PATH):
+# # # # #     pred = []
+# # # # #     errors = 0
+
+# # # # #     for i, (label, words) in enumerate(read_from(test_path), 1):
+# # # # #         features = make_vector(words)
+# # # # #         pred_label = 1 if model.dot(features) > 0 else -1
+# # # # #         pred_symbol = "+" if pred_label == 1 else "-"
+# # # # #         pred.append(pred_symbol)
+# # # # #         errors += (pred_label != label)
+
+# # # # #     error_rate = errors / i
+# # # # #     print("test error %.1f%% %s" % (error_rate * 100, symbol()))
+# # # # #     return pred, error_rate
+
+# # # # # def write_out(pred, err_rate, test_path=TEST_PATH, output_path=OUTPUT_PATH, log_path=LOG_PATH):
+# # # # #     test = pd.read_csv(test_path).copy()
+# # # # #     test["target"] = pred
+# # # # #     test.to_csv(output_path, index=False)
+
+# # # # #     with open(log_path, 'a') as f:
+# # # # #         f.write(f"{err_rate:.2f}\n")
+
+# # # # # def extra(model, dev_path=DEV_PATH, output_file="misclassed.txt"):
+# # # # #     # # Convert model to a list of (feature, weight) pairs
+# # # # #     # features = list(model.items())
+
+# # # # #     # # Sort by weight
+# # # # #     # sorted_by_weight = sorted(features, key=lambda x: x[1])
+
+# # # # #     # # Top 20 negative (lowest weights)
+# # # # #     # print("Top 20 most negative features:")
+# # # # #     # for feature, weight in sorted_by_weight[:20]:
+# # # # #     #     print(f"{feature}: {weight:.4f}")
+
+# # # # #     # # Top 20 positive (highest weights)
+# # # # #     # print("\nTop 20 most positive features:")
+# # # # #     # for feature, weight in sorted_by_weight[-20:][::-1]:
+# # # # #     #     print(f"{feature}: {weight:.4f}")
+
+
+# # # # #     # false_positives = []  # true label -1, predicted +1
+# # # # #     # false_negatives = []  # true label +1, predicted -1
+
+# # # # #     # for label, words in read_from(dev_path):
+# # # # #     #     sent_vector = make_vector(words)
+# # # # #     #     score = model.dot(sent_vector)
+# # # # #     #     sentence_text = " ".join(words)
+
+# # # # #     #     # Misclassified negative as positive
+# # # # #     #     if label == -1 and score > 0:
+# # # # #     #         false_positives.append((score, sentence_text))
+
+# # # # #     #     # Misclassified positive as negative
+# # # # #     #     elif label == +1 and score < 0:
+# # # # #     #         false_negatives.append((score, sentence_text))
+
+# # # # #     # # Sort by confidence (score magnitude)
+# # # # #     # false_positives.sort(key=lambda x: -x[0])  # most positive scores first
+# # # # #     # false_negatives.sort(key=lambda x: x[0])   # most negative scores first
+
+# # # # #     # # Write to a text file
+# # # # #     # with open(output_file, "w", encoding="utf-8") as f:
+# # # # #     #     f.write("Top 5 negative examples misclassified as positive:\n")
+# # # # #     #     for score, sentence in false_positives[:5]:
+# # # # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # # # #     #     f.write("\nTop 5 positive examples misclassified as negative:\n")
+# # # # #     #     for score, sentence in false_negatives[:5]:
+# # # # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # # # #     # print(f"Misclassified sentences written to {output_file}")
+# # # # #     print("Done")
+
+# # # # # def main():
+# # # # #     start_time = time.time()
+
+# # # # #     print("🔹 Training model...")
+# # # # #     model = train(10)
+
+# # # # #     print("🔹 Evaluating on test set...")
+# # # # #     pred, err = predict(model)
+
+# # # # #     print("🔹 Writing out...")
+# # # # #     write_out(pred, err)
+
+# # # # #     elapsed = time.time() - start_time
+# # # # #     print(f"✅ Completed in {elapsed:.2f} seconds.")
+
+# # # # #     print("\nPrinting extra data\n")
+# # # # #     extra(model)
+
+# # # # # if __name__ == "__main__":
+# # # # #     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # # # from __future__ import division
+
+# # # # import pandas as pd
+# # # # import time
+# # # # import os
+# # # # from svector import svector
+
+# # # # __author__ = "Protzela"
+
+# # # # TRAIN_PATH = "train.csv"
+# # # # DEV_PATH = "dev.csv"
+# # # # TEST_PATH = "test.csv"
+
+# # # # OUTPUT_PATH = "test.predicted.csv"
+# # # # LOG_PATH = "log.txt"
+
+# # # # EPOCHS = 10
+
+# # # # def symbol(error_rate, log_path=LOG_PATH):
+# # # #     if not os.path.exists(log_path):
+# # # #         with open(log_path, 'w') as f:
+# # # #             f.write(f"{error_rate}\n")
+
+# # # #     with open(log_path, 'r') as file:
+# # # #         lines = file.readlines()
+
+# # # #     last = float(lines[-1].strip())
+# # # #     best = min(float(line.strip()) for line in lines)
+
+# # # #     symbol1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+# # # #     symbol2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+# # # #     return symbol1 + symbol2
+
+# # # # def read_from(file_path):
+# # # #     data = pd.read_csv(file_path)
+# # # #     for i in range(len(data)):
+# # # #         id, words, label = data.iloc[i]
+# # # #         yield (1 if label=="+" else -1, words.split())
+
+# # # # def make_vector(words):
+# # # #     v = svector()
+# # # #     for word in words:
+# # # #         v[word] += 1
+# # # #     v["<bias>"] = 1  # added bias
+# # # #     return v
+
+# # # # def test(model, dev_path=DEV_PATH):
+# # # #     tot, err = 0, 0
+# # # #     for i, (label, words) in enumerate(read_from(dev_path), 1): # note 1...|D|
+# # # #         err += label * (model.dot(make_vector(words))) <= 0
+# # # #     return err/i  # i is |D| now
+
+# # # # def train_normal(train_path=TRAIN_PATH, dev_path=DEV_PATH):
+# # # #     start_time = time.time()
+# # # #     model = svector()
+
+# # # #     for epoch in range(EPOCHS):
+# # # #         for label, words in read_from(train_path):
+# # # #             features = make_vector(words)
+# # # #             if label * model.dot(features) <= 0:
+# # # #                 model += label * features
+
+# # # #     dev_error = test(model, dev_path)
+# # # #     print("Normal: Best dev err %.1f%%, |w|=%d, time: %.1f secs" % (dev_error * 100, len(model), time.time() - start_time))
+# # # #     return model
+
+# # # # def train(train_path=TRAIN_PATH, dev_path=DEV_PATH):
+# # # #     start_time = time.time()
+# # # #     best_dev_error = 1.0
+
+# # # #     model = svector()         # current weight vector (w)
+# # # #     sum_updates = svector()     # accumulated weight vector (wa)
+# # # #     counter = 0               # number of examples seen (c)
+
+# # # #     for epoch in range(1, EPOCHS + 1):
+# # # #         updates = 0
+# # # #         for i, (label, words) in enumerate(read_from(train_path), 1):  # label is +1 or -1
+# # # #             features = make_vector(words)
+# # # #             if label * model.dot(features) <= 0:
+# # # #                 updates += 1
+# # # #                 model += label * features
+# # # #                 sum_updates += counter * (label * features)
+# # # #             counter += 1
+
+# # # #         # Compute final averaged model: model_avg = counter * model - sum_updates
+# # # #         model_avg = svector()
+# # # #         for feature in model:
+# # # #             model_avg[feature] = model[feature] - (sum_updates.get(feature, 0) / counter)
+
+# # # #         dev_error = test(model_avg, dev_path)
+# # # #         best_dev_error = min(best_dev_error, dev_error)
+# # # #         # print("epoch %d, update %.1f%%, dev %.1f%%" % (epoch, updates / i * 100, dev_error * 100))
+
+# # # #     print("Average: Best dev err %.1f%%, |w|=%d, time: %.1f secs" % (best_dev_error * 100, len(model_avg), time.time() - start_time))
+# # # #     return model_avg
+
+# # # # def predict(model, test_path=TEST_PATH):
+# # # #     pred = []
+# # # #     errors = 0
+
+# # # #     for i, (label, words) in enumerate(read_from(test_path), 1):
+# # # #         features = make_vector(words)
+# # # #         pred_label = 1 if model.dot(features) > 0 else -1
+# # # #         pred_symbol = "+" if pred_label == 1 else "-"
+# # # #         pred.append(pred_symbol)
+# # # #         errors += (pred_label != label)
+
+# # # #     error_rate = errors / i
+# # # #     print("Test error %.1f%% %s" % (error_rate * 100, symbol(error_rate)))
+# # # #     return pred, error_rate
+
+# # # # def write_out(pred, err_rate, test_path=TEST_PATH, output_path=OUTPUT_PATH, log_path=LOG_PATH):
+# # # #     test = pd.read_csv(test_path).copy()
+# # # #     test["target"] = pred
+# # # #     test.to_csv(output_path, index=False)
+
+# # # #     with open(log_path, 'a') as f:
+# # # #         f.write(f"{err_rate}\n")
+
+# # # # def extra(model, dev_path=DEV_PATH, output_file="misclassed.txt"):
+# # # #     # # Convert model to a list of (feature, weight) pairs
+# # # #     # features = list(model.items())
+
+# # # #     # # Sort by weight
+# # # #     # sorted_by_weight = sorted(features, key=lambda x: x[1])
+
+# # # #     # # Top 20 negative (lowest weights)
+# # # #     # print("Top 20 most negative features:")
+# # # #     # for feature, weight in sorted_by_weight[:20]:
+# # # #     #     print(f"{feature}: {weight:.4f}")
+
+# # # #     # # Top 20 positive (highest weights)
+# # # #     # print("\nTop 20 most positive features:")
+# # # #     # for feature, weight in sorted_by_weight[-20:][::-1]:
+# # # #     #     print(f"{feature}: {weight:.4f}")
+
+
+# # # #     # false_positives = []  # true label -1, predicted +1
+# # # #     # false_negatives = []  # true label +1, predicted -1
+
+# # # #     # for label, words in read_from(dev_path):
+# # # #     #     sent_vector = make_vector(words)
+# # # #     #     score = model.dot(sent_vector)
+# # # #     #     sentence_text = " ".join(words)
+
+# # # #     #     # Misclassified negative as positive
+# # # #     #     if label == -1 and score > 0:
+# # # #     #         false_positives.append((score, sentence_text))
+
+# # # #     #     # Misclassified positive as negative
+# # # #     #     elif label == +1 and score < 0:
+# # # #     #         false_negatives.append((score, sentence_text))
+
+# # # #     # # Sort by confidence (score magnitude)
+# # # #     # false_positives.sort(key=lambda x: -x[0])  # most positive scores first
+# # # #     # false_negatives.sort(key=lambda x: x[0])   # most negative scores first
+
+# # # #     # # Write to a text file
+# # # #     # with open(output_file, "w", encoding="utf-8") as f:
+# # # #     #     f.write("Top 5 negative examples misclassified as positive:\n")
+# # # #     #     for score, sentence in false_positives[:5]:
+# # # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # # #     #     f.write("\nTop 5 positive examples misclassified as negative:\n")
+# # # #     #     for score, sentence in false_negatives[:5]:
+# # # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # # #     # print(f"Misclassified sentences written to {output_file}")
+# # # #     print("Done")
+
+# # # # def main():
+# # # #     start_time = time.time()
+
+# # # #     print("🔹 Training models...")
+# # # #     model_normal = train_normal()
+# # # #     model_avg = train()
+
+# # # #     print("🔹 Evaluating models on dev set...")
+# # # #     err_normal = test(model_normal)
+# # # #     err_avg = test(model_avg)
+
+# # # #     print("🔹 Evaluating on test set...")
+# # # #     best_model = model_normal if err_normal < err_avg else model_avg
+# # # #     pred, err = predict(best_model)
+
+# # # #     print("🔹 Writing out...")
+# # # #     write_out(pred, err)
+
+# # # #     elapsed = time.time() - start_time
+# # # #     print(f"✅ Completed in {elapsed:.2f} seconds.")
+
+# # # #     print("\nPrinting extra data\n")
+# # # #     extra(best_model)
+
+# # # # if __name__ == "__main__":
+# # # #     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # # from __future__ import division
+
+# # # import pandas as pd
+# # # import time
+# # # import os
+# # # from svector import svector
+
+# # # __author__ = "Protzela"
+
+# # # TRAIN_PATH = "train.csv"
+# # # DEV_PATH = "dev.csv"
+# # # TEST_PATH = "test.csv"
+
+# # # OUTPUT_PATH = "test.predicted.csv"
+# # # LOG_PATH = "log.txt"
+
+# # # EPOCHS = 10
+
+# # # def symbol(error_rate, log_path=LOG_PATH):
+# # #     if not os.path.exists(log_path):
+# # #         with open(log_path, 'w') as f:
+# # #             f.write(f"{error_rate}\n")
+
+# # #     with open(log_path, 'r') as file:
+# # #         lines = file.readlines()
+
+# # #     last = float(lines[-1].strip())
+# # #     best = min(float(line.strip()) for line in lines)
+
+# # #     symbol1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+# # #     symbol2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+# # #     return symbol1 + symbol2
+
+# # # def read_from(file_path):
+# # #     data = pd.read_csv(file_path)
+# # #     for i in range(len(data)):
+# # #         id, words, label = data.iloc[i]
+# # #         yield (1 if label=="+" else -1, words.split())
+
+# # # def make_vector(words):
+# # #     v = svector()
+# # #     for word in words:
+# # #         v[word] += 1
+# # #     v["<bias>"] = 1  # added bias
+# # #     return v
+
+# # # def test(model, dev_path=DEV_PATH):
+# # #     tot, err = 0, 0
+# # #     for i, (label, words) in enumerate(read_from(dev_path), 1): # note 1...|D|
+# # #         err += label * (model.dot(make_vector(words))) <= 0
+# # #     return err/i  # i is |D| now
+
+# # # def train(train_path=TRAIN_PATH, dev_path=DEV_PATH):
+# # #     start_time = time.time()
+# # #     best_err = 1.
+# # #     model = svector()         # current weight vector (w)
+# # #     sum_updates = svector()     # accumulated weight vector (wa)
+# # #     counter = 0               # number of examples seen (c)
+
+# # #     for i in range(1, EPOCHS + 1):
+# # #         updates = 0
+# # #         for ii, (label, words) in enumerate(read_from(train_path), 1):  # label is +1 or -1
+# # #             features = make_vector(words)
+# # #             if label * model.dot(features) <= 0:
+# # #                 updates += 1
+# # #                 model += label * features
+# # #                 sum_updates += counter * (label * features)
+# # #             counter += 1
+
+# # #         model_avg = svector()
+# # #         for feature in model:
+# # #             model_avg[feature] = model[feature] - (sum_updates.get(feature, 0) / counter)
+
+# # #         dev_error = test(model_avg, dev_path)
+# # #         best_err = min(best_err, dev_error)
+# # #         # print("epoch %d, update %.1f%%, dev %.1f%%" % (epoch, updates / i * 100, dev_error * 100))
+
+# # #     print("Average: Best dev err %.1f%%, |w|=%d, time: %.1f secs" % (best_err * 100, len(model_avg), time.time() - start_time))
+# # #     return model_avg
+
+# # # def predict(model, test_path=TEST_PATH):
+# # #     pred = []
+# # #     errors = 0
+
+# # #     for i, (label, words) in enumerate(read_from(test_path), 1):
+# # #         features = make_vector(words)
+# # #         pred_label = 1 if model.dot(features) > 0 else -1
+# # #         pred_symbol = "+" if pred_label == 1 else "-"
+# # #         pred.append(pred_symbol)
+# # #         errors += (pred_label != label)
+
+# # #     error_rate = errors / i
+# # #     print("Test error %.1f%% %s" % (error_rate * 100, symbol(error_rate)))
+# # #     return pred, error_rate
+
+# # # def write_out(pred, err_rate, test_path=TEST_PATH, output_path=OUTPUT_PATH, log_path=LOG_PATH):
+# # #     test = pd.read_csv(test_path).copy()
+# # #     test["target"] = pred
+# # #     test.to_csv(output_path, index=False)
+
+# # #     with open(log_path, 'a') as f:
+# # #         f.write(f"{err_rate}\n")
+
+# # # def extra(model, dev_path=DEV_PATH, output_file="misclassed.txt"):
+# # #     # # Convert model to a list of (feature, weight) pairs
+# # #     # features = list(model.items())
+
+# # #     # # Sort by weight
+# # #     # sorted_by_weight = sorted(features, key=lambda x: x[1])
+
+# # #     # # Top 20 negative (lowest weights)
+# # #     # print("Top 20 most negative features:")
+# # #     # for feature, weight in sorted_by_weight[:20]:
+# # #     #     print(f"{feature}: {weight:.4f}")
+
+# # #     # # Top 20 positive (highest weights)
+# # #     # print("\nTop 20 most positive features:")
+# # #     # for feature, weight in sorted_by_weight[-20:][::-1]:
+# # #     #     print(f"{feature}: {weight:.4f}")
+
+
+# # #     # false_positives = []  # true label -1, predicted +1
+# # #     # false_negatives = []  # true label +1, predicted -1
+
+# # #     # for label, words in read_from(dev_path):
+# # #     #     sent_vector = make_vector(words)
+# # #     #     score = model.dot(sent_vector)
+# # #     #     sentence_text = " ".join(words)
+
+# # #     #     # Misclassified negative as positive
+# # #     #     if label == -1 and score > 0:
+# # #     #         false_positives.append((score, sentence_text))
+
+# # #     #     # Misclassified positive as negative
+# # #     #     elif label == +1 and score < 0:
+# # #     #         false_negatives.append((score, sentence_text))
+
+# # #     # # Sort by confidence (score magnitude)
+# # #     # false_positives.sort(key=lambda x: -x[0])  # most positive scores first
+# # #     # false_negatives.sort(key=lambda x: x[0])   # most negative scores first
+
+# # #     # # Write to a text file
+# # #     # with open(output_file, "w", encoding="utf-8") as f:
+# # #     #     f.write("Top 5 negative examples misclassified as positive:\n")
+# # #     #     for score, sentence in false_positives[:5]:
+# # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # #     #     f.write("\nTop 5 positive examples misclassified as negative:\n")
+# # #     #     for score, sentence in false_negatives[:5]:
+# # #     #         f.write(f"{score:.4f}: {sentence}\n")
+
+# # #     # print(f"Misclassified sentences written to {output_file}")
+# # #     print("Done")
+
+# # # def main():
+# # #     start_time = time.time()
+
+# # #     print("🔹 Training model...")
+# # #     model = train()
+
+# # #     print("🔹 Evaluating on test set...")
+# # #     pred, err = predict(model)
+
+# # #     print("🔹 Writing out...")
+# # #     write_out(pred, err)
+
+# # #     elapsed = time.time() - start_time
+# # #     print(f"✅ Completed in {elapsed:.2f} seconds.")
+
+# # #     print("\nPrinting extra data\n")
+# # #     extra(model)
+
+# # # if __name__ == "__main__":
+# # #     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # from __future__ import division
+
+# # import pandas as pd
+# # import time
+# # import os
+# # from svector import svector
+# # from collections import Counter
+
+# # __author__ = "Protzela"
+
+# # TRAIN_PATH = "train.csv"
+# # DEV_PATH = "dev.csv"
+# # TEST_PATH = "test.csv"
+
+# # OUTPUT_PATH = "test.predicted.csv"
+# # LOG_PATH = "log.txt"
+
+# # EPOCHS = 10
+
+# # def symbol(error_rate):
+# #     if not os.path.exists(LOG_PATH):
+# #         with open(LOG_PATH, 'w') as f:
+# #             f.write(f"{error_rate}\n")
+
+# #     with open(LOG_PATH, 'r') as file:
+# #         lines = file.readlines()
+
+# #     last = float(lines[-1].strip())
+# #     best = min(float(line.strip()) for line in lines)
+
+# #     s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+# #     s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+# #     return s1 + s2
+
+# # def read_from(textfile):
+# #     data = pd.read_csv(textfile)
+# #     for i in range(len(data)):
+# #         id, words, label = data.iloc[i]
+# #         yield (1 if label=="+" else -1, words.split())
+
+# # def dictionary():
+# #     counter = Counter(word for _, words in read_from(TRAIN_PATH) for word in words)
+# #     book = {word for word, count in counter.items() if count > 2}
+# #     print(f"\tDropped {len(counter) - len(book)} one-count words")
+# #     return book
+
+# # def make_vector(words, book):
+# #     v = svector()
+# #     for word in words:
+# #         if word in book: # check if word is not one-count
+# #             v[word] += 1
+# #     v["<bias>"] = 1
+# #     return v
+
+# # def test(model, book):
+# #     err = 0
+# #     for i, (label, words) in enumerate(read_from(DEV_PATH), 1): # note 1...|D|
+# #         err += label * model.dot(make_vector(words, book)) <= 0
+# #     return err / i # i is |D| now
+
+# # def train(vocab):
+# #     start_time = time.time()
+# #     w = svector()
+# #     w_sum = svector()
+# #     seen = 0
+# #     best_dev_error = 1.0
+# #     update_percent = 0.0
+
+# #     for _ in range(EPOCHS):
+# #         updates = 0
+# #         for label, words in read_from(TRAIN_PATH):
+# #             x = make_vector(words, vocab)
+# #             if label * w.dot(x) <= 0:
+# #                 w += label * x
+# #                 w_sum += seen * (label * x)
+# #                 updates += 1
+# #             seen += 1
+
+# #         w_avg = svector()
+# #         for f in w:
+# #             w_avg[f] = w[f] - (w_sum.get(f, 0) / seen)
+
+# #         dev_error = test(w_avg, vocab)
+# #         best_dev_error = min(best_dev_error, dev_error)
+# #         update_percent = (updates / seen) * 100
+
+# #     print("\tBest dev err %.1f%%, |w|=%d, update%% = %.1f, time: %.1f secs" %
+# #           (best_dev_error * 100, len(w_avg), update_percent, time.time() - start_time))
+# #     return w_avg
+
+# # def predict(model, book):
+# #     pred = []
+# #     err = 0
+
+# #     for i, (label, words) in enumerate(read_from(TEST_PATH), 1):
+# #         features = make_vector(words, book)
+# #         pred_label = 1 if model.dot(features) > 0 else -1
+# #         pred.append("+" if pred_label == 1 else "-")
+# #         err += pred_label != label
+
+# #     err_rate = err / i
+# #     print("\tTest error %.1f%% %s" % (err_rate * 100, symbol(err_rate)))
+# #     return pred, err_rate
+
+# # def write_out(pred, err_rate):
+# #     test = pd.read_csv(TEST_PATH).copy()
+# #     test["target"] = pred
+# #     test.to_csv(OUTPUT_PATH, index=False)
+
+# #     with open(LOG_PATH, 'a') as f:
+# #         f.write(f"{err_rate}\n")
+
+# # def extra(model):
+# #     print("\tDone")
+
+# # def main():
+# #     start = time.time()
+
+# #     print("🔹 Building dictionary...")
+# #     book = dictionary()
+
+# #     print("🔹 Training model...")
+# #     model = train(book)
+
+# #     print("🔹 Evaluating on test set...")
+# #     pred, err = predict(model, book)
+
+# #     print("🔹 Writing out...")
+# #     write_out(pred, err)
+
+# #     print(f"\n✅ Completed in {time.time() - start:.2f} seconds.")
+
+# #     # print("\nPrinting extra data\n")
+# #     # extra(model)
+
+# # if __name__ == "__main__":
+# #     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from __future__ import division
+
+# import pandas as pd
+# import time
+# import os
+# from svector import svector
+# from collections import Counter
+
+# __author__ = "Protzela"
+
+# TRAIN_PATH = "train.csv"
+# DEV_PATH = "dev.csv"
+# TEST_PATH = "test.csv"
+
+# OUTPUT_PATH = "test.predicted.csv"
+# LOG_PATH = "log.txt"
+
+# EPOCHS = 10
+
+# def symbol(error_rate):
+#     if not os.path.exists(LOG_PATH):
+#         with open(LOG_PATH, 'w') as f:
+#             f.write(f"{error_rate}\n")
+
+#     with open(LOG_PATH, 'r') as file:
+#         lines = file.readlines()
+
+#     last = float(lines[-1].strip())
+#     best = min(float(line.strip()) for line in lines)
+
+#     s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+#     s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+#     return s1 + s2
+
+# def read_from(textfile):
+#     data = pd.read_csv(textfile)
+#     for i in range(len(data)):
+#         id, words, label = data.iloc[i]
+#         yield (1 if label=="+" else -1, words.split())
+
+# def dictionary():
+#     counter = Counter(word for _, words in read_from(TRAIN_PATH) for word in words)
+#     book = {word for word, count in counter.items() if count > 1}
+#     print(f"\tDropped {len(counter) - len(book)} one-count words")
+#     return book
+
+# def make_vector(words, book):
+#     v = svector()
+#     for word in words:
+#         if word in book: # check if word is not one-count
+#             v[word] += 1
+#     v["<bias>"] = 1
+#     return v
+
+# def test(model, book):
+#     err = 0
+#     for i, (label, words) in enumerate(read_from(DEV_PATH), 1): # note 1...|D|
+#         err += label * model.dot(make_vector(words, book)) <= 0
+#     return err / i # i is |D| now
+
+# def train(book):
+#     start_time = time.time()
+#     model = svector()
+#     model_sum = svector()
+#     seen = 0
+#     best_dev_error = 1.0
+#     update_percent = 0.0
+
+#     for i in range(EPOCHS):
+#         updates = 0
+#         for label, words in read_from(TRAIN_PATH):
+#             x = make_vector(words, book)
+#             if label * model.dot(x) <= 0:
+#                 model += label * x
+#                 model_sum += seen * (label * x)
+#                 updates += 1
+#             seen += 1
+
+#         model_avg = svector()
+#         for f in model:
+#             model_avg[f] = model[f] - (model_sum.get(f, 0) / seen)
+
+#         dev_error = test(model_avg, book)
+#         best_dev_error = min(best_dev_error, dev_error)
+#         update_percent = (updates / seen) * 100
+
+#     print("\tBest dev err %.1f%%, |model|=%d, update%% = %.1f, time: %.1f secs" %
+#           (best_dev_error * 100, len(model_avg), update_percent, time.time() - start_time))
+#     return model_avg
+
+# def predict(model, book):
+#     pred = []
+#     err = 0
+
+#     for i, (label, words) in enumerate(read_from(TEST_PATH), 1):
+#         features = make_vector(words, book)
+#         pred_label = 1 if model.dot(features) > 0 else -1
+#         pred.append("+" if pred_label == 1 else "-")
+#         err += pred_label != label
+
+#     err_rate = err / i
+#     print("\tTest error %.1f%% %s" % (err_rate * 100, symbol(err_rate)))
+#     return pred, err_rate
+
+# def write_out(pred, err_rate):
+#     test = pd.read_csv(TEST_PATH).copy()
+#     test["target"] = pred
+#     test.to_csv(OUTPUT_PATH, index=False)
+
+#     with open(LOG_PATH, 'a') as f:
+#         f.write(f"{err_rate}\n")
+
+# def extra(model):
+#     print("\tDone")
+
+# def main():
+#     start = time.time()
+
+#     print("🔹 Building dictionary...")
+#     book = dictionary()
+
+#     print("🔹 Training model...")
+#     model = train(book)
+
+#     print("🔹 Evaluating on test set...")
+#     pred, err = predict(model, book)
+
+#     print("🔹 Writing out...")
+#     write_out(pred, err)
+
+#     print(f"\n✅ Completed in {time.time() - start:.2f} seconds.")
+
+#     # print("\nPrinting extra data\n")
+#     # extra(model)
+
+# if __name__ == "__main__":
+#     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from __future__ import division
+
+# import pandas as pd
+# import time
+# import os
+# from svector import svector
+# from collections import Counter
+# import numpy as np
+# from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.metrics import accuracy_score
+
+# __author__ = "Protzela"
+
+# TRAIN_PATH = "train.csv"
+# DEV_PATH = "dev.csv"
+# TEST_PATH = "test.csv"
+# OUTPUT_PATH = "test.predicted.csv"
+# LOG_PATH = "log.txt"
+
+# K = 10
+
+# def symbol(error_rate):
+#     if not os.path.exists(LOG_PATH):
+#         with open(LOG_PATH, 'w') as f:
+#             f.write(f"{error_rate}\n")
+
+#     with open(LOG_PATH, 'r') as file:
+#         lines = file.readlines()
+
+#     last = float(lines[-1].strip())
+#     best = min(float(line.strip()) for line in lines)
+
+#     s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+#     s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+#     return s1 + s2
+
+# def read_from(textfile):
+#     data = pd.read_csv(textfile)
+#     for i in range(len(data)):
+#         id, words, label = data.iloc[i]
+#         yield (1 if label=="+" else -1, words.split())
+
+# def dictionary():
+#     counter = Counter(word for _, words in read_from(TRAIN_PATH) for word in words)
+#     book = {word for word, count in counter.items() if count > 1}
+#     print(f"\tDropped {len(counter) - len(book)} one-count words")
+#     return book
+
+# def make_vector(words, book):
+#     index = {word: i for i, word in enumerate(sorted(book))}
+#     index["<bias>"] = len(index)
+#     X, y = [], []
+
+#     for label, words in words:
+#         vec = np.zeros(len(index))
+#         for word in words:
+#             if word in book:
+#                 vec[index[word]] += 1
+#         vec[index["<bias>"]] = 1
+#         X.append(vec)
+#         y.append(label)
+#     return np.array(X), np.array(y)
+
+# def test(model, book):
+#     err = 0
+#     for i, (label, words) in enumerate(read_from(DEV_PATH), 1): # note 1...|D|
+#         err += label * model.dot(make_vector(words, book)) <= 0
+#     return err / i # i is |D| now
+
+# def train(book):
+#     start_time = time.time()
+#     train_data = list(read_from(TRAIN_PATH))
+#     X_train, y_train = make_vector(train_data, book)
+#     model = KNeighborsClassifier(n_neighbors=K)
+#     model.fit(X_train, y_train)
+#     dev_data = list(read_from(DEV_PATH))
+#     X_dev, y_dev = make_vector(dev_data, book)
+#     y_pred_dev = model.predict(X_dev)
+#     dev_error = 1 - accuracy_score(y_dev, y_pred_dev)
+
+#     print("\tBest dev err %.1f%%, |model|=%d, time: %.1f secs" %
+#           (dev_error * 100, X_train.shape[1], time.time() - start_time))
+
+#     return model
+
+# def predict(model, book):
+#     test_data = list(read_from(TEST_PATH))
+#     X_test, y_test = make_vector(test_data, book)
+#     y_pred = model.predict(X_test)
+#     err_rate = 1 - accuracy_score(y_test, y_pred)
+#     pred = ["+" if y == 1 else "-" for y in y_pred]
+#     print("\tTest error %.1f%% %s" % (err_rate * 100, symbol(err_rate)))
+#     return pred, err_rate
+
+# def write_out(pred, err_rate):
+#     test = pd.read_csv(TEST_PATH).copy()
+#     test["target"] = pred
+#     test.to_csv(OUTPUT_PATH, index=False)
+#     with open(LOG_PATH, 'a') as f:
+#         f.write(f"{err_rate}\n")
+
+# def main():
+#     start = time.time()
+
+#     print("🔹 Building dictionary...")
+#     book = dictionary()
+
+#     print("🔹 Training model...")
+#     model = train(book)
+
+#     print("🔹 Evaluating on test set...")
+#     pred, err = predict(model, book)
+
+#     print("🔹 Writing out...")
+#     write_out(pred, err)
+
+#     print(f"\n✅ Completed in {time.time() - start:.2f} seconds.")
+
+# if __name__ == "__main__":
+#     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from __future__ import division
+
+import pandas as pd
+import time
+import os
+from svector import svector
+from collections import Counter
+
+__author__ = "Protzela"
+
+TRAIN_PATH = "train.csv"
+DEV_PATH = "dev.csv"
+TEST_PATH = "test.csv"
+
+OUTPUT_PATH = "test.predicted.csv"
+LOG_PATH = "log.txt"
+
+EPOCHS = 10
+
+def symbol(error_rate):
+    if not os.path.exists(LOG_PATH):
+        with open(LOG_PATH, 'w') as f:
+            f.write(f"{error_rate}\n")
+
+    with open(LOG_PATH, 'r') as file:
+        lines = file.readlines()
+
+    last = float(lines[-1].strip())
+    best = min(float(line.strip()) for line in lines)
+
+    s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+    s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+    return s1 + s2
+
+def read_from(textfile):
+    data = pd.read_csv(textfile)
+    for i in range(len(data)):
+        id, words, label = data.iloc[i]
+        yield (1 if label=="+" else -1, words.split())
+
+def dictionary():
+    counter = Counter(word for _, words in read_from(TRAIN_PATH) for word in words)
+    book = {word for word, count in counter.items() if count > 1}
+    print(f"\tDropped {len(counter) - len(book)} one-count words")
+    return book
+
+def make_vector(words, book):
+    v = svector()
+    for word in words:
+        if word in book: # check if word is not one-count
+            v[word] += 1
+    v["<bias>"] = 1
+    return v
+
+def test(model, book):
+    err = 0
+    for i, (label, words) in enumerate(read_from(DEV_PATH), 1): # note 1...|D|
+        err += label * model.dot(make_vector(words, book)) <= 0
+    return err / i # i is |D| now
+
+def train(book):
+    start_time = time.time()
+    model = svector()
+    model_sum = svector()
+    seen = 0
+    best_dev_error = 1.0
+    update_percent = 0.0
+
+    for i in range(EPOCHS):
+        updates = 0
+        for label, words in read_from(TRAIN_PATH):
+            x = make_vector(words, book)
+            if label * model.dot(x) <= 0:
+                model += label * x
+                model_sum += seen * (label * x)
+                updates += 1
+            seen += 1
+
+        model_avg = svector()
+        for f in model:
+            model_avg[f] = model[f] - (model_sum.get(f, 0) / seen)
+
+        dev_error = test(model_avg, book)
+        best_dev_error = min(best_dev_error, dev_error)
+        update_percent = (updates / seen) * 100
+
+    print("\tBest dev err %.1f%%, |model|=%d, update%% = %.1f, time: %.1f secs" %
+          (best_dev_error * 100, len(model_avg), update_percent, time.time() - start_time))
+    return model_avg
+
+def predict(model, book):
+    pred = []
+    err = 0
+
+    for i, (label, words) in enumerate(read_from(TEST_PATH), 1):
+        features = make_vector(words, book)
+        pred_label = 1 if model.dot(features) > 0 else -1
+        pred.append("+" if pred_label == 1 else "-")
+        err += pred_label != label
+
+    err_rate = err / i
+    print("\tTest error %.1f%% %s" % (err_rate * 100, symbol(err_rate)))
+    return pred, err_rate
+
+def write_out(pred, err_rate):
+    test = pd.read_csv(TEST_PATH).copy()
+    test["target"] = pred
+    test.to_csv(OUTPUT_PATH, index=False)
+
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err_rate}\n")
+
+def main():
+    start = time.time()
+
+    print("🔹 Building dictionary...")
+    book = dictionary()
+
+    print("🔹 Training model...")
+    model = train(book)
+
+    print("🔹 Evaluating on test set...")
+    pred, err = predict(model, book)
+
+    print("🔹 Writing out...")
+    write_out(pred, err)
+
+    print(f"\n✅ Completed in {time.time() - start:.2f} seconds.")
+
+if __name__ == "__main__":
+    main()

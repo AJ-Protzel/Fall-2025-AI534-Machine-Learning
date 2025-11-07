@@ -17,6 +17,7 @@ def make_vector(words):
     v = svector()
     for word in words:
         v[word] += 1
+    v["<bias>"] = 1 # added bias
     return v
     
 def test(devfile, model):
