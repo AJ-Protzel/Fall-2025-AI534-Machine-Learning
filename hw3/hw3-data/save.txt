@@ -1,0 +1,986 @@
+import numpy as np
+import pandas as pd
+
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+
+__author__ = "Protzela"
+
+TRAIN_PATH = "train.csv"
+TEST_PATH = "test.csv"
+OUTPUT_PATH = "test.predicted.csv"
+
+def read_from(file, encoder=None, fit_encoder=False):
+    data = pd.read_csv(file).astype(str).fillna("NA")
+    x = data.drop(['Id', 'SalePrice'], axis=1, errors='ignore')
+
+    if fit_encoder:
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True)
+        encoder.fit(x)
+
+    x_encoded = encoder.transform(x)
+    df = pd.DataFrame.sparse.from_spmatrix(x_encoded)
+    df.insert(0, 'Id', data['Id'])
+    if 'SalePrice' in data:
+        df['SalePrice'] = data['SalePrice']
+
+    return df, encoder
+
+def train(data):
+    x = data.iloc[:, 1:-1]
+    y = np.log1p(data['SalePrice'].astype(float))
+    model = LinearRegression()
+    model.fit(x, y)
+    return model
+
+def test(model, data):
+    x = data.iloc[:, 1:]
+    y = np.expm1(model.predict(x))
+    return y
+
+def write_out(data, y):
+    data.iloc[:, [0]].assign(SalePrice=y).to_csv(OUTPUT_PATH, index=False)
+
+def main():
+    print("🔹 Loading data...")
+    train_data, encoder = read_from(TRAIN_PATH, fit_encoder=True)
+    test_data, encoder = read_from(TEST_PATH, encoder=encoder)
+
+    print("🔹 Training model...")
+    model = train(train_data)
+
+    print("🔹 Testing model...")
+    y = test(model, test_data) 
+
+    print("🔹 Writing out...")
+    write_out(test_data, y)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+def read_data(path, encoder=None, fit=False):
+    df = pd.read_csv(path).astype(str).fillna("NA")
+    x = df.drop(['Id', 'SalePrice'], axis=1, errors='ignore')
+    if fit:
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True).fit(x)
+    feature_names = encoder.get_feature_names_out(x.columns)
+    data = pd.DataFrame.sparse.from_spmatrix(encoder.transform(x), columns=feature_names)
+    data.columns = data.columns.astype(str)
+    data.insert(0, 'Id', df['Id'])
+    if 'SalePrice' in df:
+        data['SalePrice'] = df['SalePrice']
+    return data, encoder
+
+def train(df):
+    x, y = df.iloc[:, 1:-1], np.log1p(df['SalePrice'].astype(float))
+    model = LinearRegression().fit(x, y)
+    return model
+
+def predict(model, df, y=None):
+    x = df.drop(columns=['SalePrice'], errors='ignore').iloc[:, 1:]
+    y_pred = np.expm1(model.predict(x))
+    
+    if y is not None:
+        rmsle = np.sqrt(mean_squared_log_error(y, y_pred))
+        return rmsle
+    
+    return y_pred
+
+def symbol(error_rate):
+    if not os.path.exists(LOG_PATH):
+        with open(LOG_PATH, 'w') as f:
+            f.write(f"{error_rate}\n")
+
+    with open(LOG_PATH, 'r') as file:
+        lines = file.readlines()
+
+    last = float(lines[-1].strip())
+    best = min(float(line.strip()) for line in lines)
+
+    s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+    s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+    return s1 + s2
+
+def write_output(df, y, err):
+    print(f"   🔸 RMSLE {err:.6f} {symbol(err)}")
+    df[['Id']].assign(SalePrice=y).to_csv(OUTPUT_PATH, index=False)
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err}\n")
+
+def main():
+    print("🔹 Loading data...")
+    my_train_data, my_encoder = read_data(MY_TRAIN_PATH, fit=True)
+    my_test_data, _ = read_data(MY_TEST_PATH, encoder=my_encoder)
+    train_data, encoder = read_data(TRAIN_PATH, fit=True)
+    test_data, _ = read_data(TEST_PATH, encoder=encoder)
+
+    print("🔹 Training model...")
+    my_model = train(my_train_data)
+    model = train(train_data)
+
+    print("🔹 Predicting...")
+    err = predict(my_model, my_test_data, my_test_data['SalePrice'].astype(float))
+    y = predict(model, test_data)
+
+    print("🔹 Writing output...")
+    write_output(test_data, y, err)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+============================================================================================================================================
+import os
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+def read_data(path, encoder=None, fit=False):
+    df = pd.read_csv(path).astype(str).fillna("NA")
+    x = df.drop(['Id', 'SalePrice'], axis=1, errors='ignore')
+    if fit:
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True).fit(x)
+    feature_names = encoder.get_feature_names_out(x.columns)
+    data = pd.DataFrame.sparse.from_spmatrix(encoder.transform(x), columns=feature_names)
+    data.columns = data.columns.astype(str)
+    data.insert(0, 'Id', df['Id'])
+    if 'SalePrice' in df:
+        data['SalePrice'] = df['SalePrice']
+    return data, encoder
+
+def train(df):
+    x, y = df.iloc[:, 1:-1], np.log1p(df['SalePrice'].astype(float))
+    model = LinearRegression().fit(x, y)
+    return model
+
+def predict(model, df, y=None):
+    x = df.drop(columns=['SalePrice'], errors='ignore').iloc[:, 1:]
+    y_pred = np.expm1(model.predict(x))
+    
+    if y is not None:
+        rmsle = np.sqrt(mean_squared_log_error(y, y_pred))
+        return rmsle
+    
+    return y_pred
+
+def symbol(error_rate):
+    if not os.path.exists(LOG_PATH):
+        with open(LOG_PATH, 'w') as f:
+            f.write(f"{error_rate}\n")
+
+    with open(LOG_PATH, 'r') as file:
+        lines = file.readlines()
+
+    last = float(lines[-1].strip())
+    best = min(float(line.strip()) for line in lines)
+
+    s1 = '=' if error_rate == last else ('-' if error_rate > last else '+')
+    s2 = '=' if error_rate == best else ('-' if error_rate > best else '+')
+
+    return s1 + s2
+
+def write_output(df, y, err):
+    print(f"   🔸 RMSLE {err:.6f} {symbol(err)}")
+    df[['Id']].assign(SalePrice=y).to_csv(OUTPUT_PATH, index=False)
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err}\n")
+
+def main():
+    print("🔹 Loading data...")
+    my_train_data, my_encoder = read_data(MY_TRAIN_PATH, fit=True)
+    my_test_data, _ = read_data(MY_TEST_PATH, encoder=my_encoder)
+    train_data, encoder = read_data(TRAIN_PATH, fit=True)
+    test_data, _ = read_data(TEST_PATH, encoder=encoder)
+
+    print("🔹 Training model...")
+    my_model = train(my_train_data)
+    model = train(train_data)
+
+    print("🔹 Predicting...")
+    err = predict(my_model, my_test_data, my_test_data['SalePrice'].astype(float))
+    y = predict(model, test_data)
+
+    print("🔹 Writing output...")
+    write_output(test_data, y, err)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+import os
+import numpy as np
+import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+
+def make_ohe():
+    """Version-safe OneHotEncoder."""
+    try:
+        return OneHotEncoder(handle_unknown="ignore", sparse_output=True)
+    except TypeError:
+        # Older scikit-learn
+        return OneHotEncoder(handle_unknown="ignore", sparse=True)
+
+
+def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
+    """ColumnTransformer that imputes nums/cats and one-hots categoricals."""
+    # Identify numeric vs categorical from raw dtypes
+    numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
+    categorical_features = [c for c in X.columns if c not in numeric_features]
+
+    numeric_pipe = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            # with_mean=False to keep sparse compatibility after ColumnTransformer
+            ("scaler", StandardScaler(with_mean=False)),
+        ]
+    )
+
+    categorical_pipe = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", make_ohe()),
+        ]
+    )
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_pipe, numeric_features),
+            ("cat", categorical_pipe, categorical_features),
+        ],
+        remainder="drop",
+        sparse_threshold=1.0,  # keep it sparse
+    )
+    return preprocessor
+
+
+def load_xy(path: str):
+    """Load X (without Id/SalePrice) and y (if present). Do not coerce to str."""
+    df = pd.read_csv(path)
+    y = df["SalePrice"] if "SalePrice" in df.columns else None
+    X = df.drop(columns=["Id", "SalePrice"], errors="ignore")
+    ids = df["Id"] if "Id" in df.columns else None
+    return X, y, ids
+
+
+def train_pipeline(X: pd.DataFrame, y: pd.Series) -> Pipeline:
+    preprocessor = build_preprocessor(X)
+    # Ridge is a solid default for wide sparse matrices
+    model = Pipeline(
+        steps=[
+            ("prep", preprocessor),
+            ("reg", Ridge(alpha=10.0)),  # alpha is tunable; 5–50 is a good quick sweep
+        ]
+    )
+    y_log = np.log1p(y.astype(float).values)
+    model.fit(X, y_log)
+    return model
+
+
+def predict_prices(model: Pipeline, X: pd.DataFrame) -> np.ndarray:
+    y_log_pred = model.predict(X)
+    y_pred = np.expm1(y_log_pred)
+    # RMSLE requires non-negative predictions
+    y_pred = np.clip(y_pred, 0, None)
+    return y_pred
+
+
+def rmsle(model: Pipeline, X: pd.DataFrame, y_true: pd.Series) -> float:
+    y_pred = predict_prices(model, X)
+    return float(np.sqrt(mean_squared_log_error(y_true.astype(float).values, y_pred)))
+
+
+def symbol(error_rate: float) -> str:
+    """Compare current error to last and best, without writing to disk here."""
+    last = None
+    best = None
+    if os.path.exists(LOG_PATH):
+        with open(LOG_PATH, "r") as f:
+            vals = [float(line.strip()) for line in f if line.strip()]
+            if vals:
+                last = vals[-1]
+                best = min(vals)
+    s1 = "=" if last is None or abs(error_rate - last) < 1e-12 else ("-" if error_rate > last else "+")
+    s2 = "=" if best is None or abs(error_rate - best) < 1e-12 else ("-" if error_rate > best else "+")
+    return s1 + s2
+
+
+def write_output(ids: pd.Series, y_pred: np.ndarray, err: float):
+    print(f"   🔸 RMSLE {err:.6f} {symbol(err)}")
+    pd.DataFrame({"Id": ids.astype(int), "SalePrice": y_pred}).to_csv(OUTPUT_PATH, index=False)
+    with open(LOG_PATH, "a") as f:
+        f.write(f"{err}\n")
+
+
+def main():
+    print("🔹 Loading dev data...")
+    X_my_train, y_my_train, _ = load_xy(MY_TRAIN_PATH)
+    X_my_dev, y_my_dev, _ = load_xy(MY_TEST_PATH)
+
+    print("🔹 Training dev model...")
+    dev_model = train_pipeline(X_my_train, y_my_train)
+
+    print("🔹 Evaluating on dev split...")
+    err = rmsle(dev_model, X_my_dev, y_my_dev)
+
+    print("🔹 Training final model on full train.csv...")
+    X_train, y_train, _ = load_xy(TRAIN_PATH)
+    final_model = train_pipeline(X_train, y_train)
+
+    print("🔹 Predicting test.csv...")
+    X_test, _, test_ids = load_xy(TEST_PATH)
+    y_test_pred = predict_prices(final_model, X_test)
+
+    print("🔹 Writing output...")
+    write_output(test_ids, y_test_pred, err)
+
+
+if __name__ == "__main__":
+    main()
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+# def load(path, encoder=None):
+#     df = pd.read_csv(path)
+#     id = df['Id'].to_numpy()
+#     x = df.drop(['Id', 'SalePrice'], axis=1, errors='ignore')
+
+#     if encoder is None:
+#         categorical_cols = x.select_dtypes(include=['object']).columns.tolist()
+#         x[categorical_cols] = x[categorical_cols].astype(str).fillna("NA")
+#         encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(x[categorical_cols])
+#     else:
+#         categorical_cols = encoder.feature_names_in_
+#         x[categorical_cols] = x[categorical_cols].astype(str).fillna("NA")
+
+#     cat_data = encoder.transform(x[categorical_cols])
+#     num_data = x.drop(columns=categorical_cols).astype(float).fillna(0).to_numpy()
+#     X = np.hstack([num_data, cat_data])
+
+#     y = df['SalePrice'].astype(float).to_numpy() if 'SalePrice' in df else None
+#     return id, X, y, encoder
+
+# def train(X, y):
+#     return LinearRegression().fit(X, np.log1p(y))
+
+# def predict(model, X, y_true=None):
+#     y_pred = np.expm1(model.predict(X))
+#     if y_true is not None:
+#         return y_pred, np.sqrt(mean_squared_log_error(y_true, y_pred))
+#     return y_pred
+
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+import pandas as pd
+
+def load(filepath, test_size=0.2, random_state=42):
+    """
+    Load dataset from a CSV file, split into train and test sets.
+    
+    Parameters:
+        filepath (str): Path to the CSV file.
+        test_size (float): Proportion of data for testing.
+        random_state (int): Seed for reproducibility.
+    
+    Returns:
+        X_train, X_test, y_train, y_test (tuple): Split data.
+    """
+    # Load data
+    data = pd.read_csv(filepath)
+    
+    # Assume last column is the target
+    X = data.iloc[:, :-1]
+    y = data.iloc[:, -1]
+    
+    # Split into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
+    
+    return X_train, X_test, y_train, y_test
+
+
+def train(X_train, y_train, n_neighbors=5):
+    """
+    Train a KNN classifier.
+    
+    Parameters:
+        X_train (DataFrame): Training features.
+        y_train (Series): Training labels.
+        n_neighbors (int): Number of neighbors for KNN.
+    
+    Returns:
+        model (KNeighborsClassifier): Trained model.
+    """
+    model = KNeighborsClassifier(n_neighbors=n_neighbors)
+    model.fit(X_train, y_train)
+    return model
+
+
+def predict(model, X_test, y_test=None):
+    """
+    Make predictions using the trained model.
+    
+    Parameters:
+        model (KNeighborsClassifier): Trained model.
+        X_test (DataFrame): Test features.
+        y_test (Series, optional): True labels for evaluation.
+    
+    Returns:
+        predictions (ndarray): Predicted labels.
+        accuracy (float, optional): Accuracy score if y_test provided.
+    """
+    predictions = model.predict(X_test)
+    if y_test is not None:
+        accuracy = accuracy_score(y_test, predictions)
+        return predictions, accuracy
+    return predictions
+
+def write_output(id, y, err):
+    pd.DataFrame({'Id': id, 'SalePrice': y}).to_csv(OUTPUT_PATH, index=False)
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err}\n")
+    
+    if not os.path.isfile(LOG_PATH):
+        symbol = "=="
+    vals = list(map(float, open(LOG_PATH).read().split()))
+    if not vals:
+        symbol = "=="
+    last, best = vals[-1], min(vals)
+    s = lambda x, y: '=' if abs(x - y) < 1e-6 else ('+' if x < y else '-')
+    symbol = s(err, last) + s(err, best)
+    print(f"   🔸 RMSLE {err:.6f} {symbol}")
+
+def main():
+    # print("🔹 Loading data...")
+    # id_my_train, X_my_train, y_my_train, my_encoder = load(MY_TRAIN_PATH)
+    # id_my_test, X_my_test, y_my_test, _ = load(MY_TEST_PATH, encoder=my_encoder)
+    # id_train, X_train, y_train, encoder = load(TRAIN_PATH)
+    # id_test, X_test, _, _ = load(TEST_PATH, encoder=encoder)
+
+    # print("🔹 Training model...")
+    # my_model = train(X_my_train, y_my_train)
+    # model = train(X_train, y_train)
+
+    # print("🔹 Predicting...")
+    # _, err = predict(my_model, X_my_test, y_my_test)
+    # y_pred = predict(model, X_test)
+
+    # print("🔹 Writing output...")
+    # write_output(id_test, y_pred, err)
+
+
+
+    # Load data from TRAIN_PATH and TEST_PATH
+    X_train, X_test, y_train, y_test = load(TRAIN_PATH)
+
+    # Train the model
+    model = train(X_train, y_train, n_neighbors=3)
+
+    # Predict on TEST_PATH data
+    predictions, acc = predict(model, X_test, y_test)
+    print("Predictions:", predictions)
+    print("Accuracy:", acc)
+
+    # --- If you want to use your custom train/dev split ---
+    X_my_train, X_my_dev, y_my_train, y_my_dev = load(MY_TRAIN_PATH)
+
+    # Train on custom training set
+    my_model = train(X_my_train, y_my_train, n_neighbors=5)
+
+    # Predict on custom dev set
+    my_predictions, my_acc = predict(my_model, X_my_dev, y_my_dev)
+    print("My Predictions:", my_predictions)
+    print("My Accuracy:", my_acc)
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    import os
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+def load(path, encoder=None):
+    df = pd.read_csv(path)
+    id = df['Id'].to_numpy()
+    x = df.drop(['Id', 'SalePrice'], axis=1, errors='ignore')
+
+    if encoder is None:
+        categorical_cols = x.select_dtypes(include=['object']).columns.tolist()
+        x[categorical_cols] = x[categorical_cols].astype(str).fillna("NA")
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(x[categorical_cols])
+    else:
+        categorical_cols = encoder.feature_names_in_
+        x[categorical_cols] = x[categorical_cols].astype(str).fillna("NA")
+
+    cat_data = encoder.transform(x[categorical_cols])
+    num_data = x.drop(columns=categorical_cols).astype(float).fillna(0).to_numpy()
+    x = np.hstack([num_data, cat_data])
+
+    y = df['SalePrice'].astype(float).to_numpy() if 'SalePrice' in df else None
+    return id, x, y, encoder
+
+def train(x, y):
+    return LinearRegression().fit(x, np.log1p(y))
+
+def predict(model, x, y_actual=None):
+    y_pred = np.expm1(model.predict(x))
+    if y_actual is not None:
+        return np.sqrt(mean_squared_log_error(y_actual, y_pred))
+    return y_pred
+
+def write_output(id, y, err):
+    pd.DataFrame({'Id': id, 'SalePrice': y}).to_csv(OUTPUT_PATH, index=False)
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err}\n")
+    
+    if not os.path.isfile(LOG_PATH):
+        symbol = "=="
+    vals = list(map(float, open(LOG_PATH).read().split()))
+    if not vals:
+        symbol = "=="
+    last, best = vals[-1], min(vals)
+    s = lambda x, y: '=' if abs(x - y) < 1e-6 else ('+' if x < y else '-')
+    symbol = s(err, last) + s(err, best)
+    print(f"   🔸 RMSLE {err:.6f} {symbol}")
+
+
+
+def extra():
+    print()
+
+
+
+def main():
+    print("🔹 Loading data...")
+    id_my_train, x_my_train, y_my_train, my_encoder = load(MY_TRAIN_PATH)
+    id_my_test, x_my_test, y_my_test, _ = load(MY_TEST_PATH, encoder=my_encoder)
+    id_train, x_train, y_train, encoder = load(TRAIN_PATH)
+    id_test, x_test, _, _ = load(TEST_PATH, encoder=encoder)
+
+    print("🔹 Training model...")
+    my_model = train(x_my_train, y_my_train)
+    model = train(x_train, y_train)
+
+    print("🔹 Predicting...")
+    err = predict(my_model, x_my_test, y_my_test)
+    y_pred = predict(model, x_test)
+
+    print("🔹 Writing output...")
+    write_output(id_test, y_pred, err)
+
+    print("🔹 Extra...")
+    extra()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+import numpy as np
+import pandas as pd
+from typing import Optional, Dict, Any, Tuple
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_squared_log_error
+
+TRAIN_PATH, TEST_PATH, OUTPUT_PATH = "train.csv", "test.csv", "test.predicted.csv"
+MY_TRAIN_PATH, MY_TEST_PATH, LOG_PATH = "my_train.csv", "my_dev.csv", "log.txt"
+
+def _make_ohe() -> OneHotEncoder:
+    try:
+        return OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=np.float32)
+    except TypeError:
+        return OneHotEncoder(handle_unknown='ignore', sparse=False, dtype=np.float32)
+
+def fit_transform_preprocessor(x_df: pd.DataFrame) -> Tuple[np.ndarray, Dict[str, Any]]:
+    categorical_cols = x_df.select_dtypes(include=['object', 'string']).columns.tolist()
+    numeric_cols = [c for c in x_df.columns if c not in categorical_cols]
+
+    x_cat = x_df[categorical_cols].astype('string').fillna("NA") if categorical_cols else pd.DataFrame(index=x_df.index)
+    ohe = _make_ohe()
+    ohe.fit(x_cat if not x_cat.empty else pd.DataFrame(index=x_df.index))
+    cat_data = ohe.transform(x_cat).astype(np.float32) if categorical_cols else np.empty((len(x_df), 0), dtype=np.float32)
+
+    x_num = x_df[numeric_cols].apply(pd.to_numeric, errors='coerce') if numeric_cols else pd.DataFrame(index=x_df.index)
+    num_median = x_num.median(numeric_only=True) if not x_num.empty else pd.Series(dtype=float)
+    x_num_filled = x_num.fillna(num_median) if not x_num.empty else x_num
+
+    log_cols = []
+    if not x_num_filled.empty:
+        skew = x_num_filled.skew(numeric_only=True).abs()
+        log_cols = [c for c in skew.index if skew[c] > 0.75 and (x_num_filled[c] >= 0).all()]
+        if log_cols:
+            x_num_filled[log_cols] = np.log1p(x_num_filled[log_cols])
+
+    num_mean = x_num_filled.mean(numeric_only=True) if not x_num_filled.empty else pd.Series(dtype=float)
+    num_std = x_num_filled.std(ddof=0, numeric_only=True).replace(0, 1.0) if not x_num_filled.empty else pd.Series(dtype=float)
+    num_data = ((x_num_filled - num_mean) / num_std).astype(np.float32).to_numpy(copy=False) if numeric_cols else np.empty((len(x_df), 0), dtype=np.float32)
+
+    prep = {
+        "ohe": ohe,
+        "categorical_cols": categorical_cols,
+        "numeric_cols": numeric_cols,
+        "num_median": num_median,
+        "num_mean": num_mean,
+        "num_std": num_std,
+        "log_cols": log_cols,
+    }
+
+    return np.hstack([num_data, cat_data]), prep
+
+def transform_only(x_df: pd.DataFrame, prep: Dict[str, Any]) -> np.ndarray:
+    cat_cols, num_cols = prep["categorical_cols"], prep["numeric_cols"]
+
+    for c in num_cols:
+        if c not in x_df.columns:
+            x_df[c] = np.nan
+    for c in cat_cols:
+        if c not in x_df.columns:
+            x_df[c] = "NA"
+
+    expected = set(cat_cols) | set(num_cols)
+    x_df = x_df[[c for c in x_df.columns if c in expected]]
+
+    cat_data = prep["ohe"].transform(x_df[cat_cols].astype('string').fillna("NA")).astype(np.float32) if cat_cols else np.empty((len(x_df), 0), dtype=np.float32)
+
+    if num_cols:
+        x_num = x_df[num_cols].apply(pd.to_numeric, errors='coerce').fillna(prep["num_median"])
+        if prep["log_cols"]:
+            present = [c for c in prep["log_cols"] if c in x_num.columns]
+            if present:
+                x_num[present] = np.log1p(x_num[present])
+        num_mean = prep["num_mean"].reindex(num_cols).fillna(0.0)
+        num_std = prep["num_std"].reindex(num_cols).fillna(1.0).replace(0, 1.0)
+        num_data = ((x_num - num_mean) / num_std).astype(np.float32).to_numpy(copy=False)
+    else:
+        num_data = np.empty((len(x_df), 0), dtype=np.float32)
+
+    return np.hstack([num_data, cat_data])
+
+def load(path: str, encoder: Optional[Dict[str, Any]] = None):
+    df = pd.read_csv(path)
+    ids = df['Id'].to_numpy() if 'Id' in df.columns else np.arange(len(df))
+    x_df = df.drop(columns=['Id', 'SalePrice'], errors='ignore')
+    y = df['SalePrice'].astype(float).to_numpy() if 'SalePrice' in df.columns else None
+
+    if encoder is None:
+        X, prep = fit_transform_preprocessor(x_df)
+        return ids, X, y, prep
+    else:
+        X = transform_only(x_df, encoder)
+        return ids, X, y, encoder
+
+def alpha(x_my_train, y_my_train, x_my_test, y_my_test):
+    def eval_alpha(a):
+        m = train(x_my_train, y_my_train, alpha=a)
+        return predict(m, x_my_test, y_my_test)
+
+    alphas = np.logspace(-4, 3, 40)
+    best_alpha, best_err = None, float('inf')
+    for a in alphas:
+        err_tmp = eval_alpha(a)
+        if err_tmp < best_err:
+            best_alpha, best_err = a, err_tmp
+
+    for _ in range(2):
+        lo, hi = best_alpha / 3.0, best_alpha * 3.0
+        for a in np.geomspace(max(lo, 1e-6), hi, 24):
+            err_tmp = eval_alpha(a)
+            if err_tmp < best_err - 1e-6:
+                best_alpha, best_err = a, err_tmp
+
+    print(f"   🔸 Best alpha {best_alpha:.6f} : {best_err:.6f}")
+    return best_alpha
+
+def train(x, y, alpha=1.0):
+    import warnings
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*Ill-conditioned matrix \(rcond=.*\): result may not be accurate\.",
+            module=r".*scipy\._lib\._util.*"
+        )
+        return Ridge(alpha=alpha, fit_intercept=True, solver='auto', max_iter=10000, tol=1e-4).fit(x, np.log1p(y))
+
+def predict(model, x, y_actual=None):
+    y_pred = np.expm1(model.predict(x))
+    y_pred = np.maximum(y_pred, 0)
+
+    if y_actual is not None:
+        y_true = np.maximum(y_actual, 0)
+        return np.sqrt(mean_squared_log_error(y_true, y_pred))
+    return y_pred
+
+def write_output(id, y, err):
+    previous = []
+    if os.path.isfile(LOG_PATH):
+        try:
+            with open(LOG_PATH, 'r') as f:
+                previous = [float(v) for v in f.read().split()]
+        except Exception:
+            previous = []
+
+    pd.DataFrame({'Id': id, 'SalePrice': y}).to_csv(OUTPUT_PATH, index=False)
+
+    with open(LOG_PATH, 'a') as f:
+        f.write(f"{err}\n")
+
+    if not previous:
+        symbol = "=="
+    else:
+        last, best = previous[-1], min(previous)
+        s = lambda x, y: '=' if abs(x - y) < 1e-6 else ('+' if x < y else '-')
+        symbol = s(err, last) + s(err, best)
+    print(f"   🔸 RMSLE {err:.6f} L{symbol}B")
+
+def main():
+    print("🔹 Loading data...")
+    id_my_train, x_my_train, y_my_train, my_encoder = load(MY_TRAIN_PATH)
+    id_my_test, x_my_test, y_my_test, _ = load(MY_TEST_PATH, encoder=my_encoder)
+
+    id_train, x_train, y_train, encoder = load(TRAIN_PATH)
+    id_test, x_test, _, _ = load(TEST_PATH, encoder=encoder)
+
+    print("🔹 Tuning alpha on dev set...")
+    best_alpha = alpha(x_my_train, y_my_train, x_my_test, y_my_test)
+
+    print("🔹 Training final model...")
+    my_model = train(x_my_train, y_my_train, alpha=best_alpha)
+    model = train(x_train, y_train, alpha=best_alpha)
+
+    print("🔹 Predicting...")
+    err = predict(my_model, x_my_test, y_my_test)
+    y_pred = predict(model, x_test)
+
+    print("🔹 Writing output...")
+    write_output(id_test, y_pred, err)
+
+if __name__ == "__main__":
+    main()
