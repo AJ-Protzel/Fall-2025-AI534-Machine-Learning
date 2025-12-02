@@ -12,6 +12,7 @@ DEV_PATH = "income.dev.csv"
 TEST_PATH = "income.test.blind.csv"
 OUTPUT_PATH = "income.test.predicted.csv"
 ERROR_LOG_PATH = "dev_error_log.txt"
+VALIDATE_PATH = "knnValidate.py"
 
 def load_data():
     train_df = pd.read_csv(TRAIN_PATH)
@@ -129,7 +130,7 @@ def write_out(y_test, err_rate, test_path=TEST_PATH, output_path=OUTPUT_PATH, lo
         f.write(f"{err_rate:.2f}\n")
 
 def validate():
-    subprocess.run(["python", "validate.py", OUTPUT_PATH])
+    subprocess.run(["python", VALIDATE_PATH, OUTPUT_PATH])
 
 def main():
     start_time = time.time()
